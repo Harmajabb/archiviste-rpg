@@ -16,6 +16,7 @@ interface DocInfo {
 /**
  * Transforme le markdown Discord le plus courant en "TextRun" Word :
  *   ***gras italique***, **gras**, *italique*, _italique_, __souligné__, ~~barré~~
+ * (Volontairement simple : pas de styles imbriqués.)
  */
 function parseInline(text: string): TextRun[] {
   const pattern = /(\*\*\*[^*]+\*\*\*|\*\*[^*]+\*\*|__[^_]+__|\*[^*\s][^*]*\*|_[^_\s][^_]*_|~~[^~]+~~)/g;
@@ -61,7 +62,7 @@ const formatDate = (d: Date) =>
 export async function buildDocx({ title, serverName, blocks }: DocInfo): Promise<Buffer> {
   const children: Paragraph[] = [];
 
-  // --- En-tête du document ---
+  // En-tête du document
   children.push(
     new Paragraph({ text: title, heading: HeadingLevel.TITLE, alignment: AlignmentType.CENTER })
   );

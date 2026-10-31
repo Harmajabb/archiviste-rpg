@@ -5,8 +5,8 @@ import {
   Events,
   AttachmentBuilder,
   MessageFlags,
+  PermissionFlagsBits,
   type ChatInputCommandInteraction,
-  type TextBasedChannel,
 } from "discord.js";
 import { fetchAllMessages, isHrp } from "./fetch-messages.js";
 import { buildDocx, type RpBlock } from "./build-docx.js";
@@ -29,18 +29,47 @@ client.on(Events.InteractionCreate, async (interaction) => {
     await handleExport(interaction);
   } catch (error) {
     console.error(error);
-    const message = "Oups, l'export a échoué. Vérifie que j'ai bien accès à ce salon (Voir le salon + Lire l'historique).";
+    const message = "Oupsie, l'export a échoué. Vérifie que j'ai bien accès à ce salon (Voir le salon + Lire l'historique).";
     if (interaction.deferred || interaction.replied) await interaction.editReply(message);
     else await interaction.reply({ content: message, flags: MessageFlags.Ephemeral });
   }
 });
 
 async function handleExport(interaction: ChatInputCommandInteraction) {
-  const channel = (interaction.options.getChannel("salon") ?? interaction.channel) as TextBasedChannel | null;
+  // inCachedGuild() garantit qu'on est dans un serveur et donne accès au membre complet.
+  if (!interaction.inCachedGuild()) {
+    await interaction.reply({ content: "Cette commande s'utilise dans un serveur.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const channelId = interaction.options.getChannel("salon")?.id ?? interaction.channelId;
+  const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
   const includeHrp = interaction.options.getBoolean("inclure_hrp") ?? false;
 
-  if (!channel || !("messages" in channel)) {
+  if (!channel || !channel.isTextBased()) {
     await interaction.reply({ content: "Je ne peux pas lire ce salon.", flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  // Sécurité : la personne qui demande l'export doit pouvoir lire ce salon
+  // elle-même. Sinon, n'importe qui pourrait exporter un salon privé.
+  const needed = [PermissionFlagsBits.ViewChannel, PermissionFlagsBits.ReadMessageHistory];
+  if (!channel.permissionsFor(interaction.member).has(needed)) {
+    await interaction.reply({
+      content: "Tu n'as pas accès à l'historique de ce salon, je ne peux pas l'exporter pour toi.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Et le bot aussi, pour donner un message clair plutôt qu'une erreur.
+  const me = interaction.guild.members.me;
+  if (!me || !channel.permissionsFor(me).has(needed)) {
+    await interaction.reply({
+      content:
+        "Je n'ai pas accès à ce salon. Un admin doit autoriser mon rôle à **Voir le salon** et **Lire l'historique des messages**.",
+      flags: MessageFlags.Ephemeral,
+    });
     return;
   }
 
